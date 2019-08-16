@@ -32,12 +32,12 @@ func TestAll(t *testing.T) {
 	Info("Test Info", "i0", i0, "i1", i1)
 	Error("Test Error", "i2", i2, "i3", i3, "bi0", bi0)
 
-	logger := New("Key", "Value")
+	logger := With("Key", "Value")
 	logger.Debug("Test KeyValue Debug", "ss", ss)
 	logger.Info("Test KeyValue Info", "i0", i0, "i1", i1)
 	logger.Error("Test KeyValue Error", "i2", i2, "i3", i3, "bi0", bi0)
 
-	logger = New("KeyError")
+	logger = With("KeyError")
 	logger.Debug("Test KeyError Debug", "ss", ss)
 	logger.Info("Test KeyError Info", "i0", i0, "i1", i1)
 	logger.Error("Test KeyError Error", "i2", i2, "i3", i3, "bi0", bi0)

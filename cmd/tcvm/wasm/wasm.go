@@ -1,8 +1,6 @@
-package vm
+package wasm
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -10,9 +8,12 @@ import (
 
 	"github.com/xunleichain/tc-wasm/mock/log"
 	"github.com/xunleichain/tc-wasm/mock/types"
+	"github.com/xunleichain/tc-wasm/vm"
 )
 
-var defaultDifficulty = big.NewInt(10000000)
+var (
+	defaultDifficulty = big.NewInt(10000000)
+)
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
 // deployed contract addresses (relevant after the account abstraction).
@@ -88,7 +89,7 @@ func NewWASMContext(header *types.Header, chain ChainContext, author *types.Addr
 		IsVersion2:  false,
 	}
 
-	if ctx.Time.Cmp(TsVersion2Sec) >= 0 {
+	if ctx.Time.Cmp(vm.TsVersion2Sec) >= 0 {
 		ctx.IsVersion2 = true
 	}
 
@@ -139,23 +140,23 @@ func Transfer(db types.StateDB, sender, recipient, token types.Address, amount *
 
 // run runs the given contract and takes care of running precompiles with a fallback to the byte code interpreter.
 func run(wasm *WASM, c types.Contract, input []byte) ([]byte, uint64, error) {
-	contract := c.(*Contract)
+	contract := c.(*vm.Contract)
 	localMaxGas := new(big.Int).Mul(new(big.Int).SetUint64(contract.Gas), new(big.Int).SetUint64(wasm.WasmGasRate)).Uint64()
 
 	addr := contract.CodeAddr
 
-	eng := NewEngine(wasm.StateDB, localMaxGas, *contract, log.New("mod", "wasm"), wasm.Context)
+	eng := vm.NewEngine(contract, localMaxGas, wasm.StateDB, log.With("mod", "wasm"))
 	eng.SetTrace(false)
 	app, err := eng.NewApp(addr.String(), nil, false)
 	if err != nil {
-		if err == ErrContractNoCode {
+		if err == vm.ErrContractNoCode {
 			return nil, contract.Gas, nil
 		}
 		log.Error("WASM eng.NewApp", "err", err, "contract", addr.String())
 		return nil, contract.Gas, fmt.Errorf("WASM eng.NewApp,err:%v", err)
 	}
 
-	fnIndex := app.GetExportFunction(APPEntry)
+	fnIndex := app.GetExportFunction(vm.APPEntry)
 	if fnIndex < 0 {
 		return []byte(""), contract.Gas, fmt.Errorf("GetExportFunction(APPEntry) fail")
 	}
@@ -208,9 +209,9 @@ type WASM struct {
 	// applied in opCall*.
 	callGasTemp uint64
 
-	env *EnvTable
-	eng *Engine
-	app *APP
+	env *vm.EnvTable
+	eng *vm.Engine
+	app *vm.APP
 }
 
 // NewWASM returns a new WASM. The returned WASM is not thread safe and should
@@ -239,6 +240,10 @@ func (wasm *WASM) Reset(msg types.Message) {
 	wasm.Context.Nonce = msg.Nonce() //nonce
 }
 
+func (wasm *WASM) GetCode(bz []byte) []byte {
+	return wasm.StateDB.GetCode(types.BytesToAddress(bz))
+}
+
 // Cancel cancels any running WASM operation. This may be called concurrently and
 // it's safe to be called multiple times.
 func (wasm *WASM) Cancel() {
@@ -250,22 +255,22 @@ func (wasm *WASM) Cancel() {
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
 func (wasm *WASM) Call(c types.ContractRef, addr, token types.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	caller := c.(ContractRef)
+	caller := c.(vm.ContractRef)
 	if wasm.depth > 0 {
 		return nil, gas, nil
 	}
 
 	// Fail if we're trying to execute above the call depth limit
-	if wasm.depth > int(CallCreateDepth) {
-		return nil, gas, ErrCallDepth
+	if wasm.depth > int(vm.CallCreateDepth) {
+		return nil, gas, vm.ErrCallDepth
 	}
 	// Fail if we're trying to transfer more than the available balance
 	if !wasm.Context.CanTransfer(wasm.StateDB, caller.Address(), token, value) {
-		return nil, gas, ErrInsufficientBalance
+		return nil, gas, vm.ErrInsufficientBalance
 	}
 
 	var (
-		to       = AccountRef(addr)
+		to       = vm.AccountRef(addr)
 		snapshot = wasm.StateDB.Snapshot()
 	)
 	if !wasm.StateDB.Exist(addr) {
@@ -275,8 +280,8 @@ func (wasm *WASM) Call(c types.ContractRef, addr, token types.Address, input []b
 
 	// Initialise a new contract and set the code that is to be used by the WASM.
 	// The contract is a scoped environment for this execution context only.
-	contract := NewContract(caller, to, value, gas)
-	contract.SetCallCode(&addr, wasm.StateDB.GetCodeHash(addr), wasm.StateDB.GetCode(addr))
+	contract := vm.NewContract(caller.Address().Bytes(), to.Address().Bytes(), value, gas)
+	contract.SetCallCode(addr.Bytes(), wasm.StateDB.GetCodeHash(addr).Bytes(), wasm.StateDB.GetCode(addr))
 	contract.Input = input
 
 	ret, leftOverGas, err = run(wasm, contract, input)
@@ -286,7 +291,7 @@ func (wasm *WASM) Call(c types.ContractRef, addr, token types.Address, input []b
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil {
 		wasm.StateDB.RevertToSnapshot(snapshot)
-		if err != ErrExecutionReverted {
+		if err != vm.ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
@@ -301,36 +306,36 @@ func (wasm *WASM) Call(c types.ContractRef, addr, token types.Address, input []b
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
 func (wasm *WASM) CallCode(c types.ContractRef, addr types.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	caller := c.(ContractRef)
+	caller := c.(vm.ContractRef)
 	if wasm.depth > 0 {
 		return nil, gas, nil
 	}
 
 	// Fail if we're trying to execute above the call depth limit
-	if wasm.depth > int(CallCreateDepth) {
-		return nil, gas, ErrCallDepth
+	if wasm.depth > int(vm.CallCreateDepth) {
+		return nil, gas, vm.ErrCallDepth
 	}
 	// Fail if we're trying to transfer more than the available balance
 	if !wasm.CanTransfer(wasm.StateDB, caller.Address(), types.EmptyAddress, value) {
-		return nil, gas, ErrInsufficientBalance
+		return nil, gas, vm.ErrInsufficientBalance
 	}
 
 	var (
 		snapshot = wasm.StateDB.Snapshot()
-		to       = AccountRef(caller.Address())
+		to       = vm.AccountRef(caller.Address())
 	)
 	// initialise a new contract and set the code that is to be used by the
 	// WASM. The contract is a scoped environment for this execution context
 	// only.
-	contract := NewContract(caller, to, value, gas)
-	contract.SetCallCode(&addr, wasm.StateDB.GetCodeHash(addr), wasm.StateDB.GetCode(addr))
+	contract := vm.NewContract(caller.Address().Bytes(), to.Address().Bytes(), value, gas)
+	contract.SetCallCode(addr.Bytes(), wasm.StateDB.GetCodeHash(addr).Bytes(), wasm.StateDB.GetCode(addr))
 	contract.Input = input
 
 	ret, leftOverGas, err = run(wasm, contract, input)
 	contract.Gas = leftOverGas
 	if err != nil {
 		wasm.StateDB.RevertToSnapshot(snapshot)
-		if err != ErrExecutionReverted {
+		if err != vm.ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
@@ -343,30 +348,30 @@ func (wasm *WASM) CallCode(c types.ContractRef, addr types.Address, input []byte
 // DelegateCall differs from CallCode in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
 func (wasm *WASM) DelegateCall(c types.ContractRef, addr types.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	caller := c.(ContractRef)
+	caller := c.(vm.ContractRef)
 	if wasm.depth > 0 {
 		return nil, gas, nil
 	}
 	// Fail if we're trying to execute above the call depth limit
-	if wasm.depth > int(CallCreateDepth) {
-		return nil, gas, ErrCallDepth
+	if wasm.depth > int(vm.CallCreateDepth) {
+		return nil, gas, vm.ErrCallDepth
 	}
 
 	var (
 		snapshot = wasm.StateDB.Snapshot()
-		to       = AccountRef(caller.Address())
+		to       = vm.AccountRef(caller.Address())
 	)
 
 	// Initialise a new contract and make initialise the delegate values
-	contract := NewContract(caller, to, nil, gas).AsDelegate()
-	contract.SetCallCode(&addr, wasm.StateDB.GetCodeHash(addr), wasm.StateDB.GetCode(addr))
+	contract := vm.NewContract(caller.Address().Bytes(), to.Address().Bytes(), nil, gas).AsDelegate()
+	contract.SetCallCode(addr.Bytes(), wasm.StateDB.GetCodeHash(addr).Bytes(), wasm.StateDB.GetCode(addr))
 	contract.Input = input
 
 	ret, leftOverGas, err = run(wasm, contract, input)
 	contract.Gas = leftOverGas
 	if err != nil {
 		wasm.StateDB.RevertToSnapshot(snapshot)
-		if err != ErrExecutionReverted {
+		if err != vm.ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
@@ -378,13 +383,13 @@ func (wasm *WASM) DelegateCall(c types.ContractRef, addr types.Address, input []
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
 func (wasm *WASM) StaticCall(c types.ContractRef, addr types.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	caller := c.(ContractRef)
+	caller := c.(vm.ContractRef)
 	if wasm.depth > 0 {
 		return nil, gas, nil
 	}
 	// Fail if we're trying to execute above the call depth limit
-	if wasm.depth > int(CallCreateDepth) {
-		return nil, gas, ErrCallDepth
+	if wasm.depth > int(vm.CallCreateDepth) {
+		return nil, gas, vm.ErrCallDepth
 	}
 	// Make sure the readonly is only set if we aren't in readonly yet
 	// this makes also sure that the readonly flag isn't removed for
@@ -395,14 +400,14 @@ func (wasm *WASM) StaticCall(c types.ContractRef, addr types.Address, input []by
 	// }
 
 	var (
-		to       = AccountRef(addr)
+		to       = vm.AccountRef(addr)
 		snapshot = wasm.StateDB.Snapshot()
 	)
 	// Initialise a new contract and set the code that is to be used by the
 	// WASM. The contract is a scoped environment for this execution context
 	// only.
-	contract := NewContract(caller, to, new(big.Int), gas)
-	contract.SetCallCode(&addr, wasm.StateDB.GetCodeHash(addr), wasm.StateDB.GetCode(addr))
+	contract := vm.NewContract(caller.Address().Bytes(), to.Address().Bytes(), new(big.Int), gas)
+	contract.SetCallCode(addr.Bytes(), wasm.StateDB.GetCodeHash(addr).Bytes(), wasm.StateDB.GetCode(addr))
 	contract.Input = input
 
 	// When an error was returned by the WASM or when setting the creation code
@@ -412,57 +417,27 @@ func (wasm *WASM) StaticCall(c types.ContractRef, addr types.Address, input []by
 	contract.Gas = leftOverGas
 	if err != nil {
 		wasm.StateDB.RevertToSnapshot(snapshot)
-		if err != ErrExecutionReverted {
+		if err != vm.ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
 	return ret, contract.Gas, err
 }
 
-func parseInitArgsAndCode(data []byte) ([]byte, []byte, error) {
-	input := []byte("Init|{}")
-	code := data
-	offset := 0
-
-	if IsWasmContract(data[offset : offset+wasmIDLength+1]) {
-		//if bytes.Equal(data[offset:offset+wasmIDLength], wasmID) {
-		offset += wasmIDLength
-		if bytes.Equal(data[offset:offset+initArgsIDLength], initArgsID) {
-			offset += initArgsIDLength
-
-			var argsLen uint16
-			if err := binary.Read(bytes.NewReader(data[offset:offset+2]), binary.BigEndian, &argsLen); err != nil {
-				return input, code, err
-			}
-			offset += 2
-
-			if argsLen > 0 {
-				_init := []byte("Init|")
-				input = make([]byte, len(_init)+int(argsLen))
-				copy(input, _init)
-				copy(input[len(_init):], data[offset:offset+int(argsLen)])
-				offset += int(argsLen)
-			}
-			code = data[offset:]
-		}
-	}
-	return input, code, nil
-}
-
 // Create creates a new contract using code as deployment code.
 func (wasm *WASM) Create(c types.ContractRef, data []byte, gas uint64, value *big.Int) (ret []byte, contractAddr types.Address, leftOverGas uint64, err error) {
-	caller := c.(ContractRef)
+	caller := c.(vm.ContractRef)
 	// Depth check execution. Fail if we're trying to execute above the
 	// limit.
-	if wasm.depth > int(CallCreateDepth) {
-		return nil, types.EmptyAddress, gas, ErrCallDepth
+	if wasm.depth > int(vm.CallCreateDepth) {
+		return nil, types.EmptyAddress, gas, vm.ErrCallDepth
 	}
 	if !wasm.CanTransfer(wasm.StateDB, caller.Address(), types.EmptyAddress, value) {
-		return nil, types.EmptyAddress, gas, ErrInsufficientBalance
+		return nil, types.EmptyAddress, gas, vm.ErrInsufficientBalance
 	}
 
 	// parse Constructor's arguments && bytecode
-	input, code, err := parseInitArgsAndCode(data)
+	input, code, err := vm.ParseInitArgsAndCode(data)
 	if err != nil {
 		log.Error("WASM Create: parse InitArgs Length fail", "err", err)
 		return nil, types.EmptyAddress, gas, fmt.Errorf("Invalid InitArgs Length for Contract Init Function")
@@ -480,7 +455,7 @@ func (wasm *WASM) Create(c types.ContractRef, data []byte, gas uint64, value *bi
 
 	contractHash := wasm.StateDB.GetCodeHash(contractAddr)
 	if wasm.StateDB.GetNonce(contractAddr) != 0 || (contractHash != types.EmptyHash && contractHash != emptyCodeHash) {
-		return nil, types.EmptyAddress, 0, ErrContractAddressCollision
+		return nil, types.EmptyAddress, 0, vm.ErrContractAddressCollision
 	}
 	// Create a new account on the state
 	snapshot := wasm.StateDB.Snapshot()
@@ -496,8 +471,8 @@ func (wasm *WASM) Create(c types.ContractRef, data []byte, gas uint64, value *bi
 	// initialise a new contract and set the code that is to be used by the
 	// WASM. The contract is a scoped environment for this execution context
 	// only.
-	contract := NewContract(caller, AccountRef(contractAddr), value, gas)
-	contract.SetCallCode(&contractAddr, types.Keccak256Hash(code), code)
+	contract := vm.NewContract(caller.Address().Bytes(), contractAddr.Bytes(), value, gas)
+	contract.SetCallCode(contractAddr.Bytes(), types.Keccak256Hash(code).Bytes(), code)
 	contract.Input = []byte(strInput)
 	contract.CreateCall = true
 
@@ -512,18 +487,18 @@ func (wasm *WASM) Create(c types.ContractRef, data []byte, gas uint64, value *bi
 	contract.Gas = leftOverGas
 
 	// check whether the max code size has been exceeded
-	maxCodeSizeExceeded := len(ret) > MaxCodeSize
+	maxCodeSizeExceeded := len(ret) > vm.MaxCodeSize
 	// if the contract creation ran successfully and no errors were returned
 	// calculate the gas required to store the code. If the code could not
 	// be stored due to not enough gas set an error and let it be handled
 	// by the error checking condition below.
 	if err == nil && !maxCodeSizeExceeded {
-		createDataGas := uint64(len(ret)) * CreateDataGas / wasm.WasmGasRate
+		createDataGas := uint64(len(ret)) * vm.CreateDataGas / wasm.WasmGasRate
 		contract.Gas = leftOverGas
 		if contract.UseGas(createDataGas) {
 			wasm.StateDB.SetCode(contractAddr, ret)
 		} else {
-			err = ErrCodeStoreOutOfGas
+			err = vm.ErrCodeStoreOutOfGas
 		}
 	}
 
@@ -532,13 +507,13 @@ func (wasm *WASM) Create(c types.ContractRef, data []byte, gas uint64, value *bi
 	// when we're in homestead this also counts for code storage gas errors.
 	if maxCodeSizeExceeded || err != nil {
 		wasm.StateDB.RevertToSnapshot(snapshot)
-		if err != ErrExecutionReverted {
+		if err != vm.ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
 	// Assign err if contract code size exceeds the max while the err is still empty.
 	if maxCodeSizeExceeded && err == nil {
-		err = ErrMaxCodeSizeExceeded
+		err = vm.ErrMaxCodeSizeExceeded
 	}
 	return ret, contractAddr, contract.Gas, err
 }
@@ -549,7 +524,7 @@ func (wasm *WASM) Create(c types.ContractRef, data []byte, gas uint64, value *bi
 func (wasm *WASM) Upgrade(caller types.ContractRef, contractAddr types.Address, code []byte) {
 	wasm.StateDB.SetCode(contractAddr, code)
 	wasm.StateDB.SetNonce(wasm.Context.Origin, wasm.Context.Nonce+1)
-	gAppCache.Delete(contractAddr.String())
+	vm.AppCache.Delete(contractAddr.String())
 }
 
 //Token

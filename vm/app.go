@@ -2,6 +2,7 @@ package vm
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/go-interpreter/wagon/disasm"
@@ -23,9 +24,9 @@ const (
 var (
 	ErrNoAppEntry           = fmt.Errorf("no AppEntry(%s)", APPEntry)
 	ErrAppInput             = fmt.Errorf("invalid app input")
-	wasmIDLength            = 4
+	WasmBytes               = []byte{0x00, 0x61, 0x73, 0x6d}
 	wasmID           uint32 = 0x6d736100
-	wasmBytes               = []byte{0x00, 0x61, 0x73, 0x6d}
+	wasmIDLength            = 4
 	initArgsIDLength        = 4
 	initArgsID              = []byte("XLTC")
 )
@@ -145,6 +146,36 @@ func ParseInput(rinput []byte) (string, string, error) {
 	args := string(rinput[lenAction+1:])
 
 	return action, args, nil
+}
+
+func ParseInitArgsAndCode(data []byte) ([]byte, []byte, error) {
+	input := []byte("Init|{}")
+	code := data
+	offset := 0
+
+	if IsWasmContract(data[offset : offset+wasmIDLength+1]) {
+		//if bytes.Equal(data[offset:offset+wasmIDLength], wasmID) {
+		offset += wasmIDLength
+		if bytes.Equal(data[offset:offset+initArgsIDLength], initArgsID) {
+			offset += initArgsIDLength
+
+			var argsLen uint16
+			if err := binary.Read(bytes.NewReader(data[offset:offset+2]), binary.BigEndian, &argsLen); err != nil {
+				return input, code, err
+			}
+			offset += 2
+
+			if argsLen > 0 {
+				_init := []byte("Init|")
+				input = make([]byte, len(_init)+int(argsLen))
+				copy(input, _init)
+				copy(input[len(_init):], data[offset:offset+int(argsLen)])
+				offset += int(argsLen)
+			}
+			code = data[offset:]
+		}
+	}
+	return input, code, nil
 }
 
 // Run execute AppEntry Function

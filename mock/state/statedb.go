@@ -217,6 +217,14 @@ func (s *StateDB) GetCredits(addr types.Address) uint64 {
 	return 0
 }
 
+func (s *StateDB) GetContractCode(addr []byte) []byte {
+	stateObject := s.getStateObject(types.BytesToAddress(addr))
+	if stateObject != nil {
+		return stateObject.Code()
+	}
+	return nil
+}
+
 func (s *StateDB) GetCode(addr types.Address) []byte {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {

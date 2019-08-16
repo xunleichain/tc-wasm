@@ -21,9 +21,6 @@ const (
 )
 
 type Logger interface {
-	Test() Logger
-	New(kv ...interface{}) Logger
-
 	Printf(format string, params ...interface{})
 	Println(format string, params ...interface{})
 	Debug(msg string, ctx ...interface{})
@@ -46,20 +43,6 @@ func init() {
 	root = &LoggerImpl{
 		ctx: []interface{}{},
 		log: log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lshortfile),
-	}
-}
-
-func (l *LoggerImpl) Test() Logger {
-	return &LoggerImpl{
-		ctx: []interface{}{},
-		log: log.New(os.Stdout, "TEST*", log.Ldate|log.Ltime|log.Lshortfile),
-	}
-}
-
-func (l *LoggerImpl) New(kv ...interface{}) Logger {
-	return &LoggerImpl{
-		ctx: newContext(l.ctx, kv),
-		log: l.log,
 	}
 }
 
@@ -90,7 +73,7 @@ func Test() Logger {
 	}
 }
 
-func New(kv ...interface{}) Logger {
+func With(kv ...interface{}) Logger {
 	return &LoggerImpl{
 		ctx: newContext(root.ctx, kv),
 		log: root.log,

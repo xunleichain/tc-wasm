@@ -41,22 +41,6 @@ func init() {
 	gEnvTable.RegisterFunc("TC_CallContract", new(TCCallContract))
 	gEnvTable.RegisterFunc("TC_DelegateCallContract", new(TCDelegateCallContract))
 
-	gEnvTable.RegisterFunc("TC_StorageSet", new(TCStorageSet)) //removed
-	gEnvTable.RegisterFunc("TC_StorageGet", new(TCStorageGet)) //removed
-
-	gEnvTable.RegisterFunc("TC_StorageSetString", new(TCStorageSet))
-	gEnvTable.RegisterFunc("TC_StorageSetBytes", new(TCStorageSetBytes))
-	gEnvTable.RegisterFunc("TC_StoragePureSetString", new(TCStoragePureSetString))
-	gEnvTable.RegisterFunc("TC_StoragePureSetBytes", new(TCStoragePureSetBytes))
-
-	gEnvTable.RegisterFunc("TC_StorageGetString", new(TCStorageGet))
-	gEnvTable.RegisterFunc("TC_StorageGetBytes", new(TCStorageGet))
-	gEnvTable.RegisterFunc("TC_StoragePureGetString", new(TCStoragePureGet))
-	gEnvTable.RegisterFunc("TC_StoragePureGetBytes", new(TCStoragePureGet))
-
-	gEnvTable.RegisterFunc("TC_StorageDel", new(TCStorageDel))
-
-	gEnvTable.RegisterFunc("TC_ContractStorageGet", new(TCContractStorageGet))
 	gEnvTable.RegisterFunc("TC_BigIntAdd", new(TCBigIntAdd))
 	gEnvTable.RegisterFunc("TC_BigIntSub", new(TCBigIntSub))
 	gEnvTable.RegisterFunc("TC_BigIntMul", new(TCBigIntMul))
@@ -86,25 +70,14 @@ func init() {
 	//	gEnvTable.RegisterFunc("atof64", new(TCAtof64))
 	gEnvTable.RegisterFunc("itoa", new(TCItoa))
 	gEnvTable.RegisterFunc("i64toa", new(TCI64toa))
-	gEnvTable.RegisterFunc("TC_Notify", new(TCNotify))
-	gEnvTable.RegisterFunc("TC_CheckSign", new(TCCheckSign))
 
-	gEnvTable.RegisterFunc("TC_BlockHash", new(TCBlockHash))
-	gEnvTable.RegisterFunc("TC_GetCoinbase", new(TCGetCoinbase))
-	gEnvTable.RegisterFunc("TC_GetGasLimit", new(TCGetGasLimit))
-	gEnvTable.RegisterFunc("TC_GetNumber", new(TCGetNumber))
 	gEnvTable.RegisterFunc("TC_GetMsgData", new(TCGetMsgData))
 	gEnvTable.RegisterFunc("TC_GetMsgGas", new(TCGetMsgGas))
 	gEnvTable.RegisterFunc("TC_GetMsgSender", new(TCGetMsgSender))
 	gEnvTable.RegisterFunc("TC_GetMsgSign", new(TCGetMsgSign))
-	gEnvTable.RegisterFunc("TC_GetMsgValue", new(TCGetMsgValue))
-	gEnvTable.RegisterFunc("TC_GetMsgTokenValue", new(TCGetMsgTokenValue))
 	gEnvTable.RegisterFunc("TC_Assert", new(TCAssert))
 	gEnvTable.RegisterFunc("TC_Require", new(TCRequire))
 	gEnvTable.RegisterFunc("TC_GasLeft", new(TCGasLeft))
-	gEnvTable.RegisterFunc("TC_Now", new(TCNow))
-	gEnvTable.RegisterFunc("TC_GetTxGasPrice", new(TCGetTxGasPrice))
-	gEnvTable.RegisterFunc("TC_GetTxOrigin", new(TCGetTxOrigin))
 	gEnvTable.RegisterFunc("TC_RequireWithMsg", new(TCRequireWithMsg))
 	gEnvTable.RegisterFunc("TC_Revert", new(TCRevert))
 	gEnvTable.RegisterFunc("TC_RevertWithMsg", new(TCRevertWithMsg))
@@ -112,19 +85,10 @@ func init() {
 	gEnvTable.RegisterFunc("TC_Payable", new(TCPayable))
 
 	gEnvTable.RegisterFunc("TC_Prints", new(TCPrints))
-	gEnvTable.RegisterFunc("TC_Log0", new(TCLog0))
-	gEnvTable.RegisterFunc("TC_Log1", new(TCLog1))
-	gEnvTable.RegisterFunc("TC_Log2", new(TCLog2))
-	gEnvTable.RegisterFunc("TC_Log3", new(TCLog3))
-	gEnvTable.RegisterFunc("TC_Log4", new(TCLog4))
-	gEnvTable.RegisterFunc("TC_SelfDestruct", new(TCSelfDestruct))
 	gEnvTable.RegisterFunc("TC_GetSelfAddress", new(TCGetSelfAddress))
-	gEnvTable.RegisterFunc("TC_GetBalance", new(TCGetBalance))
-	gEnvTable.RegisterFunc("TC_Ecrecover", new(TCEcrecover))
 	gEnvTable.RegisterFunc("TC_Ripemd160", new(TCRipemd160))
 	gEnvTable.RegisterFunc("TC_Sha256", new(TCSha256))
 	gEnvTable.RegisterFunc("TC_Keccak256", new(TCKeccak256))
-	gEnvTable.RegisterFunc("TC_Transfer", new(TCTransfer))
 
 	// go json api (optional)
 	gEnvTable.RegisterFunc("TC_JsonParse", new(TCJSONParse))
@@ -146,11 +110,6 @@ func init() {
 	gEnvTable.RegisterFunc("TC_JsonPutDouble", new(TCJSONPutDouble))
 	gEnvTable.RegisterFunc("TC_JsonPutObject", new(TCJSONPutObject))
 	gEnvTable.RegisterFunc("TC_JsonToString", new(TCJSONToString))
-
-	gEnvTable.RegisterFunc("TC_Issue", new(TCIssue))
-	gEnvTable.RegisterFunc("TC_TransferToken", new(TCTransferToken))
-	gEnvTable.RegisterFunc("TC_TokenBalance", new(TCTokenBalance))
-	gEnvTable.RegisterFunc("TC_TokenAddress", new(TCTokenAddress))
 }
 
 // NewEnvTable new EnvTable
@@ -167,6 +126,11 @@ func (env *EnvTable) resolveImport(name string) (*wasm.Module, error) {
 
 // RegisterFunc Register env function for wasm module
 func (env *EnvTable) RegisterFunc(name string, fn EnvFunc) {
+	if entry, exist := env.Exports.Entries[name]; exist {
+		env.Module.FunctionIndexSpace[entry.Index].Host = fn
+		return
+	}
+
 	env.Exports.Names = append(env.Exports.Names, name)
 	env.Exports.Entries[name] = wasm.ExportEntry{
 		FieldStr: name,

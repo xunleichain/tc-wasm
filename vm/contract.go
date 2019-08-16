@@ -47,7 +47,7 @@ type Contract struct {
 	// needs to be initialised to that of the caller's caller.
 	CallerAddress types.Address
 	caller        ContractRef
-	self          ContractRef
+	Self          ContractRef
 
 	Code     []byte
 	CodeHash types.Hash
@@ -57,15 +57,29 @@ type Contract struct {
 	Gas   uint64
 	value *big.Int
 
-	Args []byte
-
 	DelegateCall bool
 	CreateCall   bool
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
-func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
-	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object, Args: nil}
+func NewContract(caller []byte, object []byte, value *big.Int, gas uint64) *Contract {
+	callerRef := ContractRef(AccountRef(types.BytesToAddress(caller)))
+	objectRef := AccountRef(types.BytesToAddress(object))
+	c := &Contract{CallerAddress: callerRef.Address(), caller: callerRef, Self: objectRef}
+
+	// Gas should be a pointer so it can safely be reduced through the run
+	// This pointer will be off the state transition
+	c.Gas = gas
+	// ensures a value is set
+	c.value = value
+	c.CreateCall = false
+
+	return c
+}
+
+// NewContract returns a new contract environment for the execution of call-contract.
+func NewContractInner(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
+	c := &Contract{CallerAddress: caller.Address(), caller: caller, Self: object}
 
 	// Gas should be a pointer so it can safely be reduced through the run
 	// This pointer will be off the state transition
@@ -109,7 +123,7 @@ func (c *Contract) UseGas(gas uint64) (ok bool) {
 
 // Address returns the contracts address
 func (c *Contract) Address() types.Address {
-	return c.self.Address()
+	return c.Self.Address()
 }
 
 // Value returns the contracts value (sent to it from it's caller)
@@ -125,8 +139,9 @@ func (c *Contract) SetCode(hash types.Hash, code []byte) {
 
 // SetCallCode sets the code of the contract and address of the backing data
 // object
-func (c *Contract) SetCallCode(addr *types.Address, hash types.Hash, code []byte) {
+func (c *Contract) SetCallCode(addr []byte, hash []byte, code []byte) {
 	c.Code = code
-	c.CodeHash = hash
-	c.CodeAddr = addr
+	c.CodeHash = types.BytesToHash(hash)
+	codeAddr := types.BytesToAddress(addr)
+	c.CodeAddr = &codeAddr
 }

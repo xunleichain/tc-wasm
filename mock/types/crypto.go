@@ -20,7 +20,6 @@ import (
 	"math/big"
 
 	"github.com/xunleichain/tc-wasm/mock/deps/rlp"
-	"github.com/xunleichain/tc-wasm/mock/deps/secp256k1"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -54,11 +53,6 @@ func Keccak256Hash(data ...[]byte) (h Hash) {
 	}
 	d.Sum(h[:0])
 	return h
-}
-
-// Ecrecover returns the uncompressed public key that created the given signature.
-func Ecrecover(hash, sig []byte) ([]byte, error) {
-	return secp256k1.RecoverPubkey(hash, sig)
 }
 
 // ValidateSignatureValues verifies whether the signature values are valid with

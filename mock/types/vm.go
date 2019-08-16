@@ -16,6 +16,7 @@ type StateDB interface {
 	SetNonce(Address, uint64)
 
 	GetCodeHash(Address) Hash
+	GetContractCode([]byte) []byte
 	GetCode(Address) []byte
 	SetCode(Address, []byte)
 	GetCodeSize(Address) int

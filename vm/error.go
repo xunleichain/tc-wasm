@@ -3,6 +3,10 @@ package vm
 import "errors"
 
 var (
+	ErrOverFrame  = errors.New("engine: recursive overflow")
+	ErrEmptyFrame = errors.New("engine: empty frame")
+	ErrInitEngine = errors.New("engine: init failed")
+
 	ErrMemoryGet          = errors.New("memory get* failed")
 	ErrMemorySet          = errors.New("memory set* failed")
 	ErrGasOverflow        = errors.New("gas overflow (uint64)")
@@ -26,10 +30,6 @@ var (
 	ErrContractRequire          = errors.New("vm: contract require fail")
 	ErrContractAssert           = errors.New("vm: contract assert fail")
 	ErrOutOfGas                 = errors.New("vm: out of gas")
-
-	ErrOverFrame  = errors.New("engine: recursive overflow")
-	ErrEmptyFrame = errors.New("engine: empty frame")
-	ErrInitEngine = errors.New("engine: init failed")
 )
 
 type Error struct {

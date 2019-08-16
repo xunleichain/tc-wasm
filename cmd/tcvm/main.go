@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xunleichain/tc-wasm/cmd/tcvm/wasm"
 	"github.com/xunleichain/tc-wasm/mock/log"
 	"github.com/xunleichain/tc-wasm/mock/state"
 	"github.com/xunleichain/tc-wasm/mock/types"
@@ -76,13 +77,13 @@ func main() {
 	to := MockAccountRef(testAddr2)
 	value := big.NewInt(0).SetUint64(*contractValue)
 
-	contract := vm.NewContract(caller, to, value, *contractGas)
-	contract.SetCallCode(&types.EmptyAddress, types.Keccak256Hash(code), code)
+	contract := vm.NewContract(caller.Address().Bytes(), to.Address().Bytes(), value, *contractGas)
+	contract.SetCallCode(types.EmptyAddress.Bytes(), types.Keccak256Hash(code).Bytes(), code)
 	contract.Input = initInput
 	contract.CreateCall = true
 
 	testHeader := types.Header{}
-	ctx := vm.NewWASMContext(&testHeader, &MockChainContext{}, &types.EmptyAddress, testGasRate)
+	ctx := wasm.NewWASMContext(&testHeader, &MockChainContext{}, &types.EmptyAddress, testGasRate)
 	ctx.Time = testTime
 	ctx.Origin = types.EmptyAddress
 	ctx.GasPrice = testGasPrice
@@ -91,8 +92,9 @@ func main() {
 	st.AddBalance(caller.Address(), testBalance1)
 	st.AddBalance(to.Address(), testBalance2)
 
-	eng := vm.NewEngine(st, contract.Gas, *contract, log.Test(), ctx)
+	eng := vm.NewEngine(contract, contract.Gas, st, log.With("mod", "wasm"))
 	eng.SetTrace(false)
+	wasm.Inject(&ctx, st)
 
 	start := time.Now()
 

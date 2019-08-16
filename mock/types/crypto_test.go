@@ -41,16 +41,6 @@ func TestKeccak256Hash(t *testing.T) {
 	checkhash(t, "Sha3-256-array", func(in []byte) []byte { h := Keccak256Hash(in); return h[:] }, msg, exp)
 }
 
-func TestEcrecover(t *testing.T) {
-	pubkey, err := Ecrecover(testmsg, testsig)
-	if err != nil {
-		t.Fatalf("recover error: %s", err)
-	}
-	if !bytes.Equal(pubkey, testpubkey) {
-		t.Errorf("pubkey mismatch: want: %x have: %x", testpubkey, pubkey)
-	}
-}
-
 func TestValidateSignatureValues(t *testing.T) {
 	check := func(expected bool, v byte, r, s *big.Int) {
 		if ValidateSignatureValues(v, r, s, false) != expected {

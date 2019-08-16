@@ -15,41 +15,44 @@ const (
 )
 
 var (
-	gAppCache *sync.Map
+	AppCache *sync.Map
 )
 
 func init() {
-	gAppCache = new(sync.Map)
+	AppCache = new(sync.Map)
+}
+
+type StateDB interface {
+	GetContractCode([]byte) []byte
 }
 
 type Engine struct {
 	logger       log.Logger
 	isTrace      bool
-	appCache     *sync.Map
-	stateDB      types.StateDB
+	isZeroAddr   bool
+	stateDB      StateDB
+	AppCache     *sync.Map
 	Env          *EnvTable
 	AppFrames    []*APP
 	FrameIndex   int
 	runningFrame *APP
 	gas          uint64
 	gasUsed      uint64
-	contract     *Contract
-	Ctx          Context
+	Contract     *Contract
 
 	jsonCache []map[string]json.RawMessage
 }
 
-func NewEngine(stateDB types.StateDB, gas uint64, c Contract, logger log.Logger, ctx Context) *Engine {
+func NewEngine(c *Contract, gas uint64, db StateDB, logger log.Logger) *Engine {
 	eng := &Engine{
 		logger:     logger,
-		appCache:   gAppCache,
-		stateDB:    stateDB,
+		stateDB:    db,
+		AppCache:   AppCache,
 		Env:        NewEnvTable(),
 		AppFrames:  make([]*APP, maxFrames),
 		FrameIndex: -1,
 		gas:        gas,
-		contract:   &c,
-		Ctx:        ctx,
+		Contract:   c,
 		jsonCache:  make([]map[string]json.RawMessage, 0, 64),
 	}
 
@@ -64,8 +67,8 @@ func (eng *Engine) Logger() log.Logger {
 	return eng.logger
 }
 
-func (eng *Engine) appByName(name string) *APP {
-	app, _ := eng.appCache.Load(name)
+func (eng *Engine) AppByName(name string) *APP {
+	app, _ := eng.AppCache.Load(name)
 	if app != nil {
 		return app.(*APP)
 	}
@@ -92,7 +95,7 @@ func (eng *Engine) GasUsed() uint64 {
 
 // Caller implement Backend
 func (eng *Engine) Caller() []byte {
-	caller := eng.contract.CallerAddress
+	caller := eng.Contract.CallerAddress
 	return caller.Bytes()
 }
 
@@ -114,7 +117,7 @@ func (eng *Engine) Trace(msg string, v ...interface{}) {
 
 func (eng *Engine) NewApp(name string, code []byte, debug bool) (*APP, error) {
 
-	if app := eng.appByName(name); app != nil {
+	if app := eng.AppByName(name); app != nil {
 		return app.Clone(eng), nil
 	}
 
@@ -125,7 +128,7 @@ func (eng *Engine) NewApp(name string, code []byte, debug bool) (*APP, error) {
 		// }
 		// types.HexToAddress(app.Name)
 
-		code = eng.stateDB.GetCode(types.HexToAddress(name))
+		code = eng.stateDB.GetContractCode(types.HexToAddress(name).Bytes())
 		if len(code) == 0 {
 			return nil, ErrContractNoCode
 		}
@@ -137,7 +140,7 @@ func (eng *Engine) NewApp(name string, code []byte, debug bool) (*APP, error) {
 		return nil, err
 	}
 
-	eng.appCache.Store(name, app)
+	eng.AppCache.Store(name, app)
 
 	return app.Clone(eng), nil
 }
@@ -177,7 +180,7 @@ func (eng *Engine) Run(app *APP, input []byte) (uint64, error) {
 
 func (eng *Engine) run(app *APP, action, args string) (ret uint64, err error) {
 	if string(action) == "Init" || string(action) == "init" {
-		if !eng.contract.CreateCall {
+		if !eng.Contract.CreateCall {
 			return 0, ErrInitEngine
 		}
 	}
@@ -257,19 +260,19 @@ func tcCallContract(eng *Engine, index int64, args []uint64) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	preContract := eng.contract
+	preContract := eng.Contract
 	//callContract not support transfer
-	eng.contract = NewContract(preContract, AccountRef(types.HexToAddress(string(appName))), big.NewInt(0), eng.Gas())
-	eng.contract.Input = make([]byte, len(action)+len(params)+1)
-	copy(eng.contract.Input[0:], action)
-	copy(eng.contract.Input[len(action):], []byte{'|'})
-	copy(eng.contract.Input[1+len(action):], params)
+	eng.Contract = NewContractInner(preContract, AccountRef(types.HexToAddress(string(appName))), big.NewInt(0), eng.Gas())
+	eng.Contract.Input = make([]byte, len(action)+len(params)+1)
+	copy(eng.Contract.Input[0:], action)
+	copy(eng.Contract.Input[len(action):], []byte{'|'})
+	copy(eng.Contract.Input[1+len(action):], params)
 	eng.logger.Debug("[Engine] TC_CallContract", "app", string(appName), "action", string(action), "params", string(params))
 	retPointer, err := eng.run(toFrame, string(action), string(params))
 	if err != nil {
 		return 0, err
 	}
-	eng.contract = preContract
+	eng.Contract = preContract
 
 	if retPointer != 0 {
 		ret, err := toFrame.VM.VMemory().GetString(uint64(retPointer))
@@ -331,18 +334,18 @@ func tcDelegateCallContract(eng *Engine, index int64, args []uint64) (uint64, er
 	if err != nil {
 		return 0, err
 	}
-	preContract := eng.contract
-	eng.contract = NewContract(preContract, AccountRef(preContract.Address()), nil, eng.Gas()).AsDelegate()
-	eng.contract.Input = make([]byte, len(action)+len(params)+1)
-	copy(eng.contract.Input[0:], action)
-	copy(eng.contract.Input[len(action):], []byte{'|'})
-	copy(eng.contract.Input[1+len(action):], params)
+	preContract := eng.Contract
+	eng.Contract = NewContractInner(preContract, AccountRef(preContract.Address()), nil, eng.Gas()).AsDelegate()
+	eng.Contract.Input = make([]byte, len(action)+len(params)+1)
+	copy(eng.Contract.Input[0:], action)
+	copy(eng.Contract.Input[len(action):], []byte{'|'})
+	copy(eng.Contract.Input[1+len(action):], params)
 	eng.logger.Debug("[Engine] TC_DelegateCallContract", "app", string(appName), "action", string(action), "params", string(params))
 	retPointer, err := eng.run(toFrame, string(action), string(params))
 	if err != nil {
 		return 0, err
 	}
-	eng.contract = preContract
+	eng.Contract = preContract
 
 	if retPointer != 0 {
 		ret, err := toFrame.VM.VMemory().GetString(uint64(retPointer))
