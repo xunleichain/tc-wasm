@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/xunleichain/tc-wasm/mock/types"
 )
@@ -1116,8 +1117,8 @@ func tcJSONGetAddress(eng *Engine, index int64, args []uint64) (uint64, error) {
 		return 0, fmt.Errorf("key(%s) not address", v)
 	}
 
-	pointer, err := vmem.SetBytes([]byte(v))
-	eng.Logger().Debug("WASM RUN LOG:call tcJSONGetAddress,address ", "v", v)
+	pointer, err := vmem.SetBytes(bytes.ToLower([]byte(v)))
+	eng.Logger().Debug("WASM RUN LOG:call tcJSONGetAddress,address ", "v", string(v[:]))
 	if err != nil {
 		return 0, err
 	}
@@ -1417,7 +1418,7 @@ func tcJSONPutAddress(eng *Engine, index int64, args []uint64) (uint64, error) {
 		return 0, fmt.Errorf("key(%s),value(%s) not address", string(key), string(val))
 	}
 	obj := eng.jsonCache[root]
-	obj[string(key)], err = json.Marshal(string(val))
+	obj[string(key)], err = json.Marshal(strings.ToLower(string(val)))
 	if err != nil {
 		eng.logger.Error(" TC_JSONPutAddress", "key", string(key), "val", string(val), "err", err)
 		return 0, err
