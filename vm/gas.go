@@ -418,6 +418,9 @@ func GasStoragePureGet(eng *Engine, index int64, args []uint64) (uint64, error) 
 func GasContractStorageGet(eng *Engine, index int64, args []uint64) (uint64, error) {
 	return GasTableEIP158.SLoad, nil
 }
+func GasContractStoragePureGet(eng *Engine, index int64, args []uint64) (uint64, error) {
+	return GasTableEIP158.SLoad, nil
+}
 
 func GasStorageSetBytes(eng *Engine, index int64, args []uint64) (uint64, error) {
 	runningFrame, _ := eng.RunningAppFrame()
