@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"math/rand"
 	"reflect"
+	"strings"
 
 	"github.com/xunleichain/tc-wasm/mock/deps/hexutil"
 )
@@ -64,7 +65,7 @@ func (h Hash) Bytes() []byte { return h[:] }
 func (h Hash) Big() *big.Int { return new(big.Int).SetBytes(h[:]) }
 
 // Hex converts a hash to a hex string.
-func (h Hash) Hex() string { return hexutil.Encode(h[:]) }
+func (h Hash) Hex() string { return strings.ToLower(hexutil.Encode(h[:])) }
 
 // TerminalString implements log.TerminalStringer, formatting a string for console
 // output during logging.
