@@ -850,7 +850,7 @@ func tcRequireWithMsg(eng *Engine, index int64, args []uint64) (uint64, error) {
 
 	if condition == 0 {
 		//TODO: write log
-		// eng.stateDB.AddLog()
+		// eng.State.AddLog()
 		eng.Logger().Debug("WASM RUN LOG:call TC_requireWithMsg", "msg", msg)
 		return 0, ErrExecutionReverted
 	}

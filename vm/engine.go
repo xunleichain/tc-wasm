@@ -30,7 +30,7 @@ type Engine struct {
 	logger       log.Logger
 	isTrace      bool
 	isZeroAddr   bool
-	stateDB      StateDB
+	State        StateDB
 	AppCache     *sync.Map
 	Env          *EnvTable
 	AppFrames    []*APP
@@ -39,6 +39,7 @@ type Engine struct {
 	gas          uint64
 	gasUsed      uint64
 	Contract     *Contract
+	Ctx          interface{}
 
 	jsonCache []map[string]json.RawMessage
 }
@@ -46,7 +47,7 @@ type Engine struct {
 func NewEngine(c *Contract, gas uint64, db StateDB, logger log.Logger) *Engine {
 	eng := &Engine{
 		logger:     logger,
-		stateDB:    db,
+		State:      db,
 		AppCache:   AppCache,
 		Env:        NewEnvTable(),
 		AppFrames:  make([]*APP, maxFrames),
@@ -128,7 +129,7 @@ func (eng *Engine) NewApp(name string, code []byte, debug bool) (*APP, error) {
 		// }
 		// types.HexToAddress(app.Name)
 
-		code = eng.stateDB.GetContractCode(types.HexToAddress(name).Bytes())
+		code = eng.State.GetContractCode(types.HexToAddress(name).Bytes())
 		if len(code) == 0 {
 			return nil, ErrContractNoCode
 		}
