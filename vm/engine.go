@@ -40,6 +40,7 @@ type Engine struct {
 	gasUsed      uint64
 	Contract     *Contract
 	Ctx          interface{}
+	fee          uint64
 
 	jsonCache []map[string]json.RawMessage
 }
@@ -362,4 +363,23 @@ func tcDelegateCallContract(eng *Engine, index int64, args []uint64) (uint64, er
 	}
 
 	return retPointer, nil
+}
+
+func (e *Engine) AddFee(fee uint64) {
+	e.fee += fee
+}
+
+func (e *Engine) GetFee() uint64 {
+	return e.fee
+}
+
+func (e *Engine) SetFee(fee uint64) {
+	e.fee = fee
+}
+
+func (e *Engine) CalFee(realCost uint64, currentFee uint64) {
+	e.fee -= currentFee
+	if e.gas-realCost > 0 {
+		e.fee += e.gas - realCost
+	}
 }
