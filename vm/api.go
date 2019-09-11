@@ -851,7 +851,7 @@ func tcRequireWithMsg(eng *Engine, index int64, args []uint64) (uint64, error) {
 	if condition == 0 {
 		//TODO: write log
 		// eng.State.AddLog()
-		eng.Logger().Debug("WASM RUN LOG:call TC_requireWithMsg", "msg", msg)
+		eng.Logger().Info("WASM RUN LOG:call TC_requireWithMsg", "msg", msg)
 		return 0, ErrExecutionReverted
 	}
 	return 0, nil
@@ -905,7 +905,7 @@ func tcRevertWithMsg(eng *Engine, index int64, args []uint64) (uint64, error) {
 	msg := string(a)
 
 	// TODO:write log
-	eng.Logger().Debug("WASM RUN LOG:call TC_revertWithMsg", "msg", msg)
+	eng.Logger().Info("WASM RUN LOG:call TC_revertWithMsg", "msg", msg)
 	return 0, ErrExecutionReverted
 }
 
