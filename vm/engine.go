@@ -379,7 +379,7 @@ func (e *Engine) SetFee(fee uint64) {
 
 func (e *Engine) CalFee(realCost uint64, currentFee uint64) {
 	e.fee -= currentFee
-	if e.gas-realCost > 0 {
+	if e.gas > realCost {
 		e.fee += e.gas - realCost
 	}
 }
