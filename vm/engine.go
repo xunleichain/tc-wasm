@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"runtime/debug"
 	"sync"
 
 	"github.com/xunleichain/tc-wasm/mock/log"
@@ -22,8 +23,21 @@ func init() {
 	AppCache = new(sync.Map)
 }
 
+func RemoveCache(name string) {
+	_app, ok := AppCache.Load(name)
+	if !ok {
+		return
+	}
+
+	app := _app.(*APP)
+	DeleteNative(app)
+	AppCache.Delete(name)
+}
+
 type StateDB interface {
 	GetContractCode([]byte) []byte
+	GetContractInfo([]byte) []byte
+	SetContractInfo([]byte, []byte)
 }
 
 type Engine struct {
@@ -67,6 +81,10 @@ func (eng *Engine) EnvTable() *EnvTable {
 
 func (eng *Engine) Logger() log.Logger {
 	return eng.logger
+}
+
+func (eng *Engine) RemoveCache(name string) {
+	RemoveCache(name)
 }
 
 func (eng *Engine) AppByName(name string) *APP {
@@ -118,7 +136,6 @@ func (eng *Engine) Trace(msg string, v ...interface{}) {
 }
 
 func (eng *Engine) NewApp(name string, code []byte, debug bool) (*APP, error) {
-
 	if app := eng.AppByName(name); app != nil {
 		return app.Clone(eng), nil
 	}
@@ -143,6 +160,7 @@ func (eng *Engine) NewApp(name string, code []byte, debug bool) (*APP, error) {
 	}
 
 	eng.AppCache.Store(name, app)
+	eng.logger.Info("[Engine] NewApp ok", "app", app.String())
 
 	return app.Clone(eng), nil
 }
@@ -181,15 +199,10 @@ func (eng *Engine) Run(app *APP, input []byte) (uint64, error) {
 }
 
 func (eng *Engine) run(app *APP, action, args string) (ret uint64, err error) {
-	if string(action) == "Init" || string(action) == "init" {
-		if !eng.Contract.CreateCall {
-			return 0, ErrInitEngine
-		}
-	}
-
 	defer func() {
+		app.Close()
 		if r := recover(); r != nil {
-			eng.logger.Debug("[Engine] run recover", "frame_index", eng.FrameIndex, "running_app", eng.runningFrame.Name)
+			eng.logger.Debug("[Engine] run recover", "frame_index", eng.FrameIndex, "running_app", eng.runningFrame.String(), "bt", string(debug.Stack()))
 			switch e := r.(type) {
 			case error:
 				err = e
@@ -198,6 +211,12 @@ func (eng *Engine) run(app *APP, action, args string) (ret uint64, err error) {
 			}
 		}
 	}()
+
+	if string(action) == "Init" || string(action) == "init" {
+		if !eng.Contract.CreateCall {
+			return 0, ErrInitEngine
+		}
+	}
 
 	if eng.runningFrame != nil {
 		if eng.runningFrame.Name == app.Name {
@@ -208,11 +227,11 @@ func (eng *Engine) run(app *APP, action, args string) (ret uint64, err error) {
 		}
 	}
 
-	eng.logger.Debug("[Engine] Run begin", "frame_index", eng.FrameIndex, "app", app.Name)
+	eng.logger.Debug("[Engine] Run begin", "frame_index", eng.FrameIndex, "app", app.String())
 	eng.runningFrame = app
 	ret, err = app.Run(action, args)
 	eng.runningFrame, _ = eng.PopAppFrame()
-	eng.logger.Debug("[Engine] Run end", "frame_index", eng.FrameIndex, "app", app.Name, "ret", ret, "err", err)
+	eng.logger.Debug("[Engine] Run end", "frame_index", eng.FrameIndex, "app", app.String(), "ret", ret, "err", err, "gas", eng.gas, "gas_used", eng.gasUsed)
 
 	return ret, err
 }

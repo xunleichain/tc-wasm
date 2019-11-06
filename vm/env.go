@@ -141,6 +141,7 @@ func (env *EnvTable) RegisterFunc(name string, fn EnvFunc) {
 		Sig:  &wasm.FunctionSig{},
 		Body: &wasm.FunctionBody{Module: &env.Module},
 		Host: fn,
+		Name: name,
 	})
 	env.importFuncCnt++
 }

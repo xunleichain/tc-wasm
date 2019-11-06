@@ -32,6 +32,7 @@ func init() {
 
 	env.RegisterFunc("TC_StorageDel", &TCStorageDel{})
 	env.RegisterFunc("TC_ContractStorageGet", &TCContractStorageGet{})
+	env.RegisterFunc("TC_ContractStoragePureGet", &TCContractStoragePureGet{})
 	env.RegisterFunc("TC_Notify", &TCNotify{})
 	env.RegisterFunc("TC_BlockHash", &TCBlockHash{})
 	env.RegisterFunc("TC_GetCoinbase", &TCGetCoinbase{})
@@ -186,7 +187,7 @@ func tcStoragePureSetBytes(eng *vm.Engine, index int64, args []uint64) (uint64, 
 	if err != nil {
 		return 0, vm.ErrMemoryGet
 	}
-	eng.Logger().Debug("TC_StoragePureSetBytes", "key", string(key), "size", len(key), "val", string(val), "size", len(val))
+	eng.Logger().Debug("TC_StoragePureSetBytes", "key", string(key), "size", len(key), "val", val, "size", len(val))
 
 	db.SetState(eng.Contract.Address(), types.Keccak256Hash(key), val)
 	return 0, nil
@@ -218,7 +219,7 @@ func tcStoragePureGet(eng *vm.Engine, index int64, args []uint64) (uint64, error
 	if err != nil {
 		return 0, vm.ErrMemorySet
 	}
-	eng.Logger().Debug("TC_StoragePureGet", "key", string(key), "val", string(val), "size", len(val))
+	eng.Logger().Debug("TC_StoragePureGet", "key", string(key), "val", val, "size", len(val))
 
 	return uint64(valPointer), nil
 }
@@ -286,6 +287,42 @@ func tcContractStorageGet(eng *vm.Engine, index int64, args []uint64) (uint64, e
 		return 0, vm.ErrMemorySet
 	}
 	eng.Logger().Debug("TC_ContractStorageGet", "key", string(key), "val", string(val))
+
+	return uint64(valPointer), nil
+}
+
+type TCContractStoragePureGet struct{}
+
+func (t *TCContractStoragePureGet) Call(index int64, ops interface{}, args []uint64) (uint64, error) {
+	eng := ops.(*vm.Engine)
+	return tcContractStoragePureGet(eng, index, args)
+}
+
+func (t *TCContractStoragePureGet) Gas(index int64, ops interface{}, args []uint64) (uint64, error) {
+	eng := ops.(*vm.Engine)
+	return vm.GasContractStoragePureGet(eng, index, args)
+}
+
+// c: char * TC_ContractStoragePureGet(address contract, uint8_t* key, uint32_t size)
+func tcContractStoragePureGet(eng *vm.Engine, index int64, args []uint64) (uint64, error) {
+	app, _ := eng.RunningAppFrame()
+	vmem := app.VM.VMemory()
+	contract, err := vmem.GetString(args[0])
+	if err != nil {
+		return 0, vm.ErrMemoryGet
+	}
+	key, err := vmem.GetBytes(args[1], int(args[2]))
+	if err != nil {
+		return 0, vm.ErrMemoryGet
+	}
+
+	// mState := eng.State.(types.StateDB)
+	val := db.GetState(types.HexToAddress(string(contract)), types.Keccak256Hash(key))
+	valPointer, err := vmem.SetBytes(val)
+	if err != nil {
+		return 0, vm.ErrMemorySet
+	}
+	eng.Logger().Debug("TC_ContractStoragePureGet", "key", string(key), "val", string(val))
 
 	return uint64(valPointer), nil
 }
@@ -688,7 +725,8 @@ func tcSelfDestruct(eng *vm.Engine, index int64, args []uint64) (uint64, error) 
 	//suicideToken(eng, addr, to)
 	db.Suicide(addr)
 	//delete cache
-	eng.AppCache.Delete(addr.String())
+	eng.RemoveCache(addr.String())
+	// eng.AppCache.Delete(addr.String())
 
 	return 0, nil
 }

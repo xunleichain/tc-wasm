@@ -2,7 +2,9 @@ package vm
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/go-interpreter/wagon/disasm"
@@ -42,23 +44,41 @@ type APP struct {
 	IsPreRun  bool
 	EntryFunc string
 
+	native *Native
+
 	result interface{}
+
+	md5 [16]byte
 }
 
 // Clone just copy
 func (app *APP) Clone(eng *Engine) *APP {
 	vm := app.VM.Clone(eng)
 	vm.RecoverPanic = true
-	return &APP{
+	newApp := &APP{
 		logger:    app.logger,
 		Name:      app.Name,
 		Module:    app.Module,
 		Eng:       eng,
 		VM:        vm,
 		VmProcess: exec.NewProcess(vm),
-		//VM:     app.VM.Clone(eng),
 		EntryFunc: app.EntryFunc,
+		md5:       app.md5,
 	}
+	newApp.native = GetNative(newApp)
+	if newApp.native == nil {
+		RefreshApp(app)
+	}
+	return newApp
+}
+
+// Close --
+func (app *APP) Close() {
+	app.native.close()
+}
+
+func (app *APP) String() string {
+	return fmt.Sprintf("%s-%s", app.Name, hex.EncodeToString(app.md5[:]))
 }
 
 // NewApp new wasm app module
@@ -80,6 +100,8 @@ func NewApp(name string, code []byte, eng *Engine, debug bool, logger log.Logger
 		return nil, fmt.Errorf("validate.VerifyMoudle fail: %s", err)
 	}
 
+	md5 := md5.Sum(code)
+
 	app := &APP{
 		logger:    logger,
 		Name:      name,
@@ -87,6 +109,7 @@ func NewApp(name string, code []byte, eng *Engine, debug bool, logger log.Logger
 		Module:    m,
 		Eng:       eng,
 		EntryFunc: APPEntry,
+		md5:       md5,
 	}
 
 	vm, err := exec.NewVM(m, eng)
@@ -96,6 +119,11 @@ func NewApp(name string, code []byte, eng *Engine, debug bool, logger log.Logger
 	app.VM = vm
 
 	return app, nil
+}
+
+// Printf --
+func (app *APP) Printf(f string, args ...interface{}) {
+	app.logger.Info(fmt.Sprintf(f, args...))
 }
 
 // GetStartFunction Get Function Index of Start function.
@@ -181,6 +209,10 @@ func ParseInitArgsAndCode(data []byte) ([]byte, []byte, error) {
 // Run execute AppEntry Function
 // the input format should be "action | args"
 func (app *APP) Run(action, args string) (uint64, error) {
+	if !app.IsPreRun && app.native != nil {
+		return app.native.RunCMain(action, args)
+	}
+
 	if app.IsPreRun {
 		return app.RunF(-1) // already set
 	}
@@ -192,19 +224,19 @@ func (app *APP) Run(action, args string) (uint64, error) {
 
 	if action == "" && args == "" {
 		return app.RunF(fnIndex)
-	} else {
-		vmem := app.VM.VMemory()
-		actionPointer, err := vmem.SetBytes([]byte(action))
-		if err != nil {
-			return 0, err
-		}
-		argsPointer, err := vmem.SetBytes([]byte(args))
-		if err != nil {
-			return 0, err
-		}
-		params := []uint64{uint64(actionPointer), uint64(argsPointer)}
-		return app.RunF(fnIndex, params...)
 	}
+
+	vmem := app.VM.VMemory()
+	actionPointer, err := vmem.SetBytes([]byte(action))
+	if err != nil {
+		return 0, err
+	}
+	argsPointer, err := vmem.SetBytes([]byte(args))
+	if err != nil {
+		return 0, err
+	}
+	params := []uint64{uint64(actionPointer), uint64(argsPointer)}
+	return app.RunF(fnIndex, params...)
 }
 
 // RunF execute function code based on specific fnInex.

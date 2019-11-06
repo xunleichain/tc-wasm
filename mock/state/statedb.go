@@ -48,6 +48,8 @@ type StateDB struct {
 	stateObjects      map[types.Address]*stateObject
 	stateObjectsDirty map[types.Address]struct{}
 
+	contractInfos map[types.Address][]byte
+
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
@@ -80,6 +82,7 @@ func New() (*StateDB, error) {
 		logs:              make(map[types.Hash][]*types.Log),
 		preimages:         make(map[types.Hash][]byte),
 		journal:           newJournal(),
+		contractInfos:     make(map[types.Address][]byte),
 	}, nil
 }
 
@@ -223,6 +226,14 @@ func (s *StateDB) GetContractCode(addr []byte) []byte {
 		return stateObject.Code()
 	}
 	return nil
+}
+
+func (s *StateDB) GetContractInfo(addr []byte) []byte {
+	return s.contractInfos[types.BytesToAddress(addr)]
+}
+
+func (s *StateDB) SetContractInfo(addr, info []byte) {
+	s.contractInfos[types.BytesToAddress(addr)] = info
 }
 
 func (s *StateDB) GetCode(addr types.Address) []byte {
