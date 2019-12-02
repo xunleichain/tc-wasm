@@ -52,6 +52,9 @@ type StateDB interface {
 	AddTokenBalance(addr Address, token Address, amount *big.Int)
 	GetTokenBalance(addr Address, token Address) *big.Int
 	GetTokenBalances(addr Address) TokenValues
+
+	GetContractInfo([]byte) []byte
+	SetContractInfo([]byte, []byte)
 }
 
 type TokenValue struct {

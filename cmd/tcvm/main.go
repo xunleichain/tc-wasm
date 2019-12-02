@@ -16,6 +16,8 @@ import (
 	"github.com/xunleichain/tc-wasm/mock/state"
 	"github.com/xunleichain/tc-wasm/mock/types"
 	"github.com/xunleichain/tc-wasm/vm"
+	// "net/http"
+	// _ "net/http/pprof"
 )
 
 var (
@@ -92,6 +94,16 @@ func main() {
 	st.AddBalance(caller.Address(), testBalance1)
 	st.AddBalance(to.Address(), testBalance2)
 
+	// info := vm.ContractInfo{
+	// 	Type: "wasm",
+	// 	Path: "/tmp/aots/0x658294a3cdbad2ace0f633f4c00b3892523d6d05.so",
+	// }
+	// md5, _ := hex.DecodeString("f99e6f7ab4b44a6bb77a0fd2f2aafe05")
+	// copy(info.MD5[:], md5[:16])
+	// fmt.Printf("ContractInfo: %v\n", info)
+	// infoData, _ := json.Marshal(&info)
+	// st.SetContractInfo(contract.Address().Bytes(), infoData)
+
 	eng := vm.NewEngine(contract, contract.Gas, st, log.With("mod", "wasm"))
 	eng.SetTrace(false)
 	wasm.Inject(&ctx, st)
@@ -113,6 +125,10 @@ func main() {
 	}
 	app.EntryFunc = vm.APPEntry
 
+	// go func() {
+	// 	http.ListenAndServe(":8000", nil)
+	// }()
+
 	ret, err := eng.Run(app, contract.Input)
 	if err != nil {
 		fmt.Printf("ERR init vm/Engine.Run failed, func=%s gasUsed=%d gasLeft=%d, err: %s",
@@ -126,6 +142,9 @@ func main() {
 		fmt.Printf("ERR init vm/MemManager.GetBytes failed, err: %v", err)
 		return
 	}
+
+	fmt.Printf("Waiting gcc compiler...\n")
+	time.Sleep(time.Second * 4)
 
 	initTime := time.Since(start).Seconds()
 
@@ -154,6 +173,11 @@ func main() {
 
 	start = time.Now()
 
+	app, err = eng.NewApp(contract.Address().String(), contract.Code, false)
+	if err != nil {
+		fmt.Printf("ERR vm/Engine.NewApp failed, err: %s\n", err)
+		return
+	}
 	ret, err = eng.Run(app, contract.Input)
 	if err != nil {
 		fmt.Printf("ERR call vm/Engine.Run failed, func=%s gasUsed=%d gasLeft=%d, err: %s",
