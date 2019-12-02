@@ -44,6 +44,8 @@ github.com/xunleichain/wagon v0.5.2 h1:Yms9pInRvlunUc4qh43gbHiHTPpWH5yIBUkyodpk/
 github.com/xunleichain/wagon v0.5.2/go.mod h1:5+b/MBYkclRZngKF5s6qrgWxSLgE9F5dFdO1hAueZLc=
 github.com/xunleichain/wagon v0.5.3 h1:Q7CWoQKXtD+ShHeu+YyPXVC/0kWcJCeD3UKsuIDpiOU=
 github.com/xunleichain/wagon v0.5.3/go.mod h1:5+b/MBYkclRZngKF5s6qrgWxSLgE9F5dFdO1hAueZLc=
+github.com/xunleichain/wagon v0.5.4 h1:DO56WGrmD+qiqp0xUTNg1kX41cUbTY95VCFdcBRukUc=
+github.com/xunleichain/wagon v0.5.4/go.mod h1:5+b/MBYkclRZngKF5s6qrgWxSLgE9F5dFdO1hAueZLc=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 h1:HuIa8hRrWRSrqYzx1qI49NNxhdi2PrY7gxVSq1JjLDc=
 golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
