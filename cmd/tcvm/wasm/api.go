@@ -1201,8 +1201,9 @@ func tcEcrecover(eng *vm.Engine, index int64, args []uint64) (uint64, error) {
 		return 0, vm.ErrInvalidApiArgs
 	}
 	sign := make([]byte, 65)
-	copy(sign[:32], r.Bytes())
-	copy(sign[32:64], s.Bytes())
+	copy(sign[32-len(r.Bytes()):32], r.Bytes())
+	copy(sign[64-len(s.Bytes()):64], s.Bytes())
+
 	chainIdMul := new(big.Int).SetInt64(vm.THUNDERCHAINID * 2)
 	sign[64] = byte(new(big.Int).Sub(v, chainIdMul).Uint64() - 35)
 	// tighter sig s values input homestead only apply to tx sigs
